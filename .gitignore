@@ -1,0 +1,11 @@
+# Generated EDA projects + build artifacts
+eda-projects/
+*.ses
+*.dsn
+*.drc.json
+build/
+__pycache__/
+*.pyc
+
+# Large binary tool (fetched by setup.sh)
+freerouting.jar
