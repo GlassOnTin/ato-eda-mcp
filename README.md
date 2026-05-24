@@ -92,6 +92,11 @@ into Haven's MCP surface and tunneled to a remote client.
 
 ## Reference design
 
-`examples/`-style: a 3.3 V LDO (AMS1117-3.3, LCSC C6186, SOT-223) with input/output
-ceramics — built, placed, routed (0 unconnected, 0 DRC errors), Gerbers exported, all
-headless. See the `.ato` snippet in this README's history / the Haven session notes.
+[`examples/ldo_3v3`](examples/ldo_3v3) — a 3.3 V LDO (AMS1117-3.3, LCSC C6186, SOT-223)
+with input/output ceramics. Built, placed, routed (0 unconnected, 0 DRC errors), Gerbers
+exported, all headless. See [`examples/README.md`](examples/README.md) for the run steps and
+expected BOM.
+
+## License
+
+[AGPL-3.0](LICENSE).

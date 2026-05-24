@@ -1,0 +1,32 @@
+"""3.3V LDO regulator module.
+
+5V (nominal) input -> AMS1117-3.3 LDO (LCSC C6186, SOT-223) -> 3.3V output,
+with input/output decoupling.
+
+Note: with an explicit LCSC part the LDO's electrical params come from the part
+itself, so only the part id + connections are set here (atopile 0.12.5 forbids
+assigning parametric fields to a pinned component).
+"""
+
+import LDO, ElectricPower, Capacitor
+
+module App:
+    ldo = new LDO
+    ldo.lcsc_id = "C6186"
+
+    power_in = new ElectricPower
+    assert power_in.voltage within 5V +/- 10%
+    ldo.power_in ~ power_in
+
+    power_out = new ElectricPower
+    ldo.power_out ~ power_out
+
+    # Input + output decoupling (plain p1/p2 connections — no experimental bridge)
+    input_cap = new Capacitor
+    output_cap = new Capacitor
+    input_cap.capacitance = 10uF +/- 20%
+    output_cap.capacitance = 22uF +/- 20%
+    input_cap.package = "C0805"
+    output_cap.package = "C0805"
+    ldo.power_in.hv ~ input_cap.p1; input_cap.p2 ~ ldo.power_in.lv
+    ldo.power_out.hv ~ output_cap.p1; output_cap.p2 ~ ldo.power_out.lv
