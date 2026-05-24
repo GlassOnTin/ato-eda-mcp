@@ -161,17 +161,22 @@ def eda_check(project: str, target: str = "default") -> str:
     viol = data.get("violations", [])
     unconn = data.get("unconnected_items", [])
     parity = data.get("schematic_parity", [])
+    errors = [v for v in viol if v.get("severity") == "error"]
+    warnings = [v for v in viol if v.get("severity") == "warning"]
 
     def summ(items):
-        return [f"{v.get('severity', '')}: {v.get('description', '')}" for v in items[:6]]
+        return [v.get("description", "") for v in items[:6]]
 
-    clean = len(viol) == 0 and len(unconn) == 0
+    # Gate `ok` on ERROR-severity violations + unconnected nets; warnings
+    # (e.g. silkscreen clearance on a dense board) are reported but not failures.
+    clean = len(errors) == 0 and len(unconn) == 0
     return json.dumps({
         "ok": clean,
-        "violations": len(viol),
+        "errors": len(errors),
+        "warnings": len(warnings),
         "unconnected": len(unconn),
         "schematic_parity_info": len(parity),
-        "samples": {"violations": summ(viol), "unconnected": summ(unconn)},
+        "samples": {"errors": summ(errors), "warnings": summ(warnings)},
     })
 
 

@@ -1,0 +1,24 @@
+#pragma experiment("TRAITS")
+import has_designator_prefix
+import has_part_picked
+import is_atomic_part
+import is_auto_generated
+
+component Texas_Instruments_NE555DR_package:
+    # This trait marks this file as auto-generated
+    # If you want to manually change it, remove the trait
+    trait is_auto_generated<system="ato_part", source="easyeda:C7593", date="2026-05-24T13:25:59.095509+00:00", checksum="fa8908948da00046b3f1b0e8699a8e3a3d08ff3a69a216a6924035174a6e5c8a">
+
+    trait is_atomic_part<manufacturer="Texas Instruments", partnumber="NE555DR", footprint="SOIC-8_L4.9-W3.9-P1.27-LS6.0-BL.kicad_mod", symbol="NE555DR.kicad_sym", model="SOIC-8_L4.9-W3.9-H1.7-LS6.0-P1.27.STEP">
+    trait has_part_picked::by_supplier<supplier_id="lcsc", supplier_partno="C7593", manufacturer="Texas Instruments", partno="NE555DR">
+    trait has_designator_prefix<prefix="U">
+
+    # pins
+    signal CONT ~ pin 5
+    signal DISCH ~ pin 7
+    signal GND ~ pin 1
+    signal OUT ~ pin 3
+    signal RST ~ pin 4
+    signal THRES ~ pin 6
+    signal TRIG ~ pin 2
+    signal VCC ~ pin 8

@@ -82,8 +82,9 @@ into Haven's MCP surface and tunneled to a remote client.
 
 ## Known limitations
 
-- **Placement is a naive fixed grid** (`place_and_dsn.py` hardcodes U1/C1/C2). Fine for
-  small reference designs; needs a real auto-placer for anything larger.
+- **Placement is a naive square grid** (`place_and_dsn.py` lays all parts on a grid + auto-
+  sizes the outline). Fine for small reference designs (a dozen-ish parts); needs a real
+  auto-placer for anything larger or layout-sensitive.
 - Sourcing is atopile's LCSC pick only; circuit-synth's DigiKey/SnapEDA enrichment is
   installed but not yet wired in.
 - atopile is schematic-less by design (the `.ato` code *is* the schematic) — there's no
