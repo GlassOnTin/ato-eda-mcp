@@ -8,6 +8,7 @@ import glob
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -19,6 +20,7 @@ JAVA = next(iter(sorted(glob.glob("/usr/lib/jvm/java-2*-openjdk*/bin/java"))), "
 FREEROUTING = "/root/freerouting.jar"
 PLACE_SCRIPT = "/root/ato-mcp/place_and_dsn.py"
 IMPORT_SES_SCRIPT = "/root/ato-mcp/import_ses.py"
+SCHEM_SCRIPT = str(Path(__file__).resolve().parent / "schematic_render.py")
 ROOT = Path(os.path.expanduser("~/eda-projects"))
 ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -221,6 +223,67 @@ def eda_export_fab(project: str, target: str = "default") -> str:
     files = sorted(p.name for p in out.iterdir())
     return json.dumps({"ok": all(r == 0 for r in (rc1, rc2, rc3)), "dir": str(out),
                        "files": files, "stderr": (e1 + e2 + e3)[-400:]})
+
+
+# ── schematic capability ─────────────────────────────────────────────────────
+# The PCB tools above derive geometry from connectivity automatically. Schematics
+# are different: a *readable* schematic needs semantic placement (which nets are
+# rails, how pins group into branches, left-to-right order) that algorithms lack.
+# So the split is: the caller (LLM) authors a declarative spec — the placement —
+# and schematic_render.py owns the deterministic geometry (lanes, routing, symbols).
+# See schematic_render.py for the spec schema. Today: the `ladder` control profile.
+
+
+@mcp.tool
+def eda_write_schematic(project: str, spec_json: str, sheet: str = "main") -> str:
+    """Store a declarative schematic spec — the LLM-authored semantic placement.
+
+    The spec (JSON) describes power `rails`, the IC `blocks`, and the `branches`
+    (ordered series chains between pins/rails). eda_render_schematic turns it into
+    an SVG via the geometry engine. JSON is validated here; rendering is separate."""
+    d = _proj(project)
+    try:
+        spec = json.loads(spec_json)
+    except json.JSONDecodeError as e:
+        return json.dumps({"ok": False, "error": f"invalid JSON: {e}"})
+    sdir = d / "schematics"
+    sdir.mkdir(parents=True, exist_ok=True)
+    f = sdir / f"{sheet}.json"
+    f.write_text(json.dumps(spec, indent=2))
+    return json.dumps({"ok": True, "path": str(f), "sheet": sheet,
+                       "branches": len(spec.get("branches", []))})
+
+
+@mcp.tool
+def eda_read_schematic(project: str, sheet: str = "main") -> str:
+    """Read a stored schematic spec (JSON) so it can be inspected or edited."""
+    f = _proj(project) / "schematics" / f"{sheet}.json"
+    if not f.exists():
+        return json.dumps({"ok": False, "error": "not found", "path": str(f)})
+    return json.dumps({"ok": True, "path": str(f), "spec": f.read_text()})
+
+
+@mcp.tool
+def eda_render_schematic(project: str, sheet: str = "main") -> str:
+    """Render a stored schematic spec to SVG (+ PNG best-effort) via the geometry
+    engine. Returns the SVG path; call Haven `view_file` on it to see pixels. A
+    malformed spec returns ok=false with the engine's error, not a broken drawing."""
+    d = _proj(project)
+    spec = d / "schematics" / f"{sheet}.json"
+    if not spec.exists():
+        return json.dumps({"ok": False, "error": "no spec — eda_write_schematic first",
+                           "path": str(spec)})
+    out = d / "build" / f"{sheet}.sch.svg"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    rc, sout, serr = _run([sys.executable, SCHEM_SCRIPT, str(spec), str(out)])
+    try:
+        info = json.loads((sout or "").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        info = {}
+    return json.dumps({"ok": bool(info.get("ok")) and out.exists(),
+                       "svg": str(out), "png": info.get("png", ""),
+                       "hint": "view_file this path", "render": info,
+                       "stderr": serr[-400:]})
 
 
 if __name__ == "__main__":

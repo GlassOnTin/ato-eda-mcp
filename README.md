@@ -41,9 +41,32 @@ the tools own the drawing.
 | `eda_get_bom` | picked BOM CSV with LCSC part numbers |
 | `eda_render_pcb` | PCB → SVG (explicit layers) for the client's image viewer |
 | `eda_export_fab` | Gerbers + drill + pick-and-place |
+| `eda_write_schematic` / `eda_read_schematic` | store / read a declarative schematic spec (the LLM-authored placement) |
+| `eda_render_schematic` | schematic spec → SVG (+ PNG best-effort) via the geometry engine |
 
 Tools return artifact **paths**, not images — the MCP client renders them (e.g. Haven's
 `view_file`).
+
+## Schematics
+
+PCB layout is *derived* — connectivity plus a placer is enough. A **readable schematic**
+is not: it needs semantic placement (which nets are rails, how pins group into branches,
+left-to-right order) that algorithms don't recover from a netlist. So the split is
+deliberate: the **caller (LLM) authors a declarative spec** — the placement — and
+`schematic_render.py` owns the **deterministic geometry**: per-branch lane allocation,
+orthogonal routing, symbol selection, rail lines, label sides.
+
+```
+eda_write_schematic(spec)  ──▶  schematics/<sheet>.json   (the placement)
+                                      │
+eda_render_schematic       ──▶  build/<sheet>.sch.svg     (the geometry)
+```
+
+Today one profile is implemented: **`ladder`** — a central IC block with two power rails
+and a fan of series branches, which covers DIN-rail relay/safety control sheets. The spec
+schema (rails / blocks / branches) is documented in `schematic_render.py`; see
+`examples/` for a worked CNC safety-relay sheet. ELK/netlistsvg general-net layout is a
+later path.
 
 ## Setup
 

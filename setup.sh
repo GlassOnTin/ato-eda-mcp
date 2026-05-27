@@ -21,8 +21,11 @@ CXXFLAGS="-include cstdint" CFLAGS="-include stdint.h" \
 # `ato` lands in ~/.local/bin — ensure it's on PATH.
 
 # --- circuit-synth venv (provides fastmcp; optional DigiKey/SnapEDA/PySpice) --
+# Also gets schemdraw — the schematic geometry engine runs under THIS interpreter
+# (the server shells out with sys.executable). cairosvg is optional: it rasterizes
+# the schematic SVG to PNG; without it eda_render_schematic returns SVG only.
 uv venv --python 3.13 "$HOME/csynth"
-uv pip install --python "$HOME/csynth/bin/python" circuit-synth
+uv pip install --python "$HOME/csynth/bin/python" circuit-synth schemdraw cairosvg
 
 # --- freerouting + a JRE >= 25 (2.2.4 needs class file 69 = Java 25) ----------
 pacman -S --noconfirm --needed jre-openjdk-headless   # Arch ships Java 26

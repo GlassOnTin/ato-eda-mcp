@@ -75,3 +75,33 @@ warnings are cosmetic — designators crowd on the dense grid).
 - An IC wired **pin-by-pin** via a generated atomic part's named signals (`u1.VCC`, `u1.OUT`,
   `u1.THRES`, …) rather than a faebryk module's power interfaces.
 - A node tied to two pins (`u1.THRES ~ u1.TRIG`) and a multi-net astable RC network.
+
+## `cnc_safety_control` — schematic, not PCB (`ladder` profile)
+
+A worked **schematic** example (the others are PCB). It's sheet 2/3 of a CNC machine's
+Cat-4 safety chain: a **Pilz PNOZ 8** safety relay with a dual-channel E-stop, a monitored
+reset, the EDM feedback loop (both K1 and K2 mirror-NC contacts in series, Y37→Y2), and the
+two fused contactor-coil drives off safety outputs 13-14 / 23-24.
+
+[`control.json`](cnc_safety_control/control.json) is the **declarative spec** — the
+semantic placement: the PNOZ as the central IC block, `+24 V` / `0 V` as top / bottom rails,
+and eleven series branches. [`control.sch.svg`](cnc_safety_control/control.sch.svg) is the
+rendered output.
+
+### Run it (over MCP)
+
+```
+eda_create_project    name=cnc_safety
+eda_write_schematic   project=cnc_safety  sheet=control  spec_json=<contents of control.json>
+eda_render_schematic  project=cnc_safety  sheet=control      # -> build/control.sch.svg
+```
+
+Or locally: `python ../../schematic_render.py control.json out.svg`.
+
+### What it demonstrates
+
+- The placer / geometry split: the spec carries **intent** (rails, branch grouping, series
+  order) and the engine derives all coordinates — every branch gets its own lane, so the
+  output has **zero wire crossings** and the rails never cut through the block.
+- Symbol mapping by `type`: `switch_nc`, `button`, `fuse`, `coil` (relay/contactor) render
+  as the right schematic symbols, labelled on the side facing away from the block.
