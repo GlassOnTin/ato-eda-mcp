@@ -105,3 +105,13 @@ Or locally: `python ../../schematic_render.py control.json out.svg`.
   output has **zero wire crossings** and the rails never cut through the block.
 - Symbol mapping by `type`: `switch_nc`, `button`, `fuse`, `coil` (relay/contactor) render
   as the right schematic symbols, labelled on the side facing away from the block.
+
+The same project also carries the **power sheet (1/3)** as a second spec,
+[`power.json`](cnc_safety_control/power.json) → [`power.sch.svg`](cnc_safety_control/power.sch.svg),
+demonstrating the **`flow` profile**: mains → K1 → K2 (two contactors in series, Cat-4
+power interruption) → VFD → spindle, with the SMPS / terminal-block / earth / brake-resistor
+blocks on lower grid rows. Here the placement the caller owns is the **(col, row) grid**, and
+the engine routes each connection as an orthogonal H–V–H path; the series power chain comes
+out as clean horizontal buses. (Known limitation: the PE/earth net wraps — point-to-point
+earth wiring is awkward in a flow layout; a ground-glyph / off-page-net symbol is the proper
+fix and is a TODO.)
