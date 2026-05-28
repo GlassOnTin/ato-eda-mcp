@@ -326,11 +326,17 @@ def _series_on_segment(d, p0, p1, series, label_loc):
 
 
 def _svg_to_png(svg_path: Path):
-    """Convert SVG→PNG via cairosvg or rsvg-convert if present; else return None."""
+    """Convert SVG→PNG via cairosvg or rsvg-convert if present; else return None.
+
+    Renders on a solid white background: the schemdraw SVG has a transparent
+    background, so a PNG without one shows as a transparency checkerboard in
+    image viewers (e.g. swayimg in Haven's present_app), washing out the thin
+    schematic lines. (view_file of the SVG is unaffected.)"""
     png_path = svg_path.with_suffix(".png")
     try:
         import cairosvg  # type: ignore
-        cairosvg.svg2png(url=str(svg_path), write_to=str(png_path), output_width=1600)
+        cairosvg.svg2png(url=str(svg_path), write_to=str(png_path),
+                         output_width=1600, background_color="white")
         return png_path
     except Exception:
         pass
@@ -338,8 +344,9 @@ def _svg_to_png(svg_path: Path):
     import subprocess
     if shutil.which("rsvg-convert"):
         try:
-            subprocess.run(["rsvg-convert", "-w", "1600", "-o", str(png_path),
-                            str(svg_path)], check=True, capture_output=True)
+            subprocess.run(["rsvg-convert", "-w", "1600", "--background-color", "white",
+                            "-o", str(png_path), str(svg_path)],
+                           check=True, capture_output=True)
             return png_path
         except Exception:
             pass
