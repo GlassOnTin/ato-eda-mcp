@@ -1,0 +1,24 @@
+{
+  "title": "CNC Cat-4 safety chain — sheet 3/3 (signals / control I-O)",
+  "profile": "flow",
+  "blocks": [
+    {"id": "LIM", "label": "Limits\nX-Y-Z NC series", "col": 0, "row": 1, "pins_right": ["L"]},
+    {"id": "PRB", "label": "Probe /\ntool setter", "col": 0, "row": 2, "pins_right": ["P"]},
+    {"id": "SOK", "label": "PNOZ Y32\nsafety OK", "col": 0, "row": 3, "pins_right": ["OK"]},
+
+    {"id": "CTRL", "label": "Motion controller\n(breakout board)", "col": 1, "row": 2,
+     "pins_left": ["SAFE", "PRB", "LIM"], "pins_right": ["ACM", "SPD", "DIR", "RUN"]},
+
+    {"id": "VFDC", "label": "VFD control\nYL620-A", "col": 2, "row": 2,
+     "pins_left": ["GND", "AI", "REV", "FWD"]}
+  ],
+  "connections": [
+    {"from": "LIM.L", "to": "CTRL.LIM", "label": "limits"},
+    {"from": "PRB.P", "to": "CTRL.PRB", "label": "probe"},
+    {"from": "SOK.OK", "to": "CTRL.SAFE", "label": "safety OK"},
+    {"from": "CTRL.RUN", "to": "VFDC.FWD", "label": "run / FWD"},
+    {"from": "CTRL.DIR", "to": "VFDC.REV", "label": "REV"},
+    {"from": "CTRL.SPD", "to": "VFDC.AI", "label": "0-10 V"},
+    {"from": "CTRL.ACM", "to": "VFDC.GND", "label": "0 V / ACM"}
+  ]
+}
