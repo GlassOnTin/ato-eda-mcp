@@ -69,9 +69,18 @@ UNIT = 2.0          # schemdraw drawing unit
 LANE_PITCH = 2.0    # ladder: horizontal spacing between adjacent branch lanes
 RAIL_GAP = 2.0      # ladder: vertical gap between outermost pins and the rails
 RAIL_MARGIN = 1.5   # ladder: how far the rails extend past the outermost lane
+MIN_ELEM_PITCH = 2.0  # ladder: min vertical run per series element, so a multi-
+                      # element branch between adjacent pins (e.g. a start +
+                      # EDM feedback loop on Y1-Y2) doesn't crowd its symbols.
 
 COL_PITCH = 9.0     # flow: horizontal spacing between grid columns
 ROW_PITCH = 11.0    # flow: vertical spacing between grid rows
+
+MODULE_W = 1.0      # panel: drawing units per 18 mm DIN module
+DEV_H = 4.0         # panel: height of a rail-mounted device
+DEV_GAP = 0.3       # panel: gap between adjacent devices on a rail
+RAIL_PITCH = 9.0    # panel: vertical spacing between DIN rails
+PANEL_MARGIN = 2.0  # panel: enclosure margin around everything
 
 
 class SchematicError(ValueError):
@@ -113,8 +122,10 @@ def render(spec: dict, svg_path: Path) -> dict:
         meta = _render_ladder(d, spec)
     elif profile == "flow":
         meta = _render_flow(d, spec)
+    elif profile == "panel":
+        meta = _render_panel(d, spec)
     else:
-        raise SchematicError(f"unsupported profile {profile!r} (ladder | flow)")
+        raise SchematicError(f"unsupported profile {profile!r} (ladder | flow | panel)")
 
     if spec.get("title"):
         cx = (meta["xmin"] + meta["xmax"]) / 2
@@ -220,9 +231,16 @@ def _draw_branch(d, a, b, sa, sb, side, lane_x, series, resolve, rail_y):
 
     if not rail_end:
         y0, y1 = pa[1], pb[1]
+        # Extend the vertical run so N series elements each get >= MIN_ELEM_PITCH.
+        # When the two pins are far apart the natural span already wins (half is
+        # half the gap); when they're adjacent the run grows symmetrically about
+        # their midpoint, and the two horizontal stubs T into it at y0 / y1.
+        ymid = (y0 + y1) / 2
+        half = max(abs(y1 - y0) / 2, len(series) * MIN_ELEM_PITCH / 2)
+        ytop, ybot = ymid + half, ymid - half
         d += elm.Line().at(pa).to((lane_x, y0))
-        _series_on_segment(d, (lane_x, y0), (lane_x, y1), series, label_loc)
-        d += elm.Line().at((lane_x, y1)).to(pb)
+        d += elm.Line().at(pb).to((lane_x, y1))
+        _series_on_segment(d, (lane_x, ytop), (lane_x, ybot), series, label_loc)
     else:
         d += elm.Line().at(pin_pt).to((lane_x, pin_y))
         _series_on_segment(d, (lane_x, pin_y), (lane_x, ry), series, label_loc)
@@ -297,6 +315,114 @@ def _route_flow(d, pa, side_a, pb, idx, label):
         d += elm.Line().at(pa).to((lane, y0))
         d += elm.Line().at((lane, y0)).to((lane, y1))
         d += elm.Line().at((lane, y1)).to(pb)
+
+
+# ── panel profile ──────────────────────────────────────────────────────────────
+def _rect(d, x0, y0, x1, y1):
+    """Draw an axis-aligned rectangle as four lines (no fill, version-proof)."""
+    d += elm.Line().at((x0, y0)).to((x1, y0))
+    d += elm.Line().at((x1, y0)).to((x1, y1))
+    d += elm.Line().at((x1, y1)).to((x0, y1))
+    d += elm.Line().at((x0, y1)).to((x0, y0))
+
+
+def _hatch_rect(d, x0, y0, x1, y1, n=7):
+    """Rectangle filled with diagonal hatch lines — marks a wire duct / trunking so
+    it reads differently from a (plain-outline) device box."""
+    _rect(d, x0, y0, x1, y1)
+    lo, hi = min(y0, y1), max(y0, y1)
+    xl, xr = min(x0, x1), max(x0, x1)
+    h = hi - lo
+    step = (xr - xl) / (n + 1)
+    for i in range(1, n + 1):
+        sx = xl + i * step
+        ex = min(sx + h, xr)          # clip the diagonal to the box
+        d += elm.Line().at((sx, lo)).to((ex, lo + (ex - sx)))
+
+
+def _render_panel(d, spec) -> dict:
+    """Physical back-panel layout: DIN-rail-mounted devices placed left-to-right on
+    horizontal rails (sized by DIN-module width), plus free back-panel components
+    (VFD, brake resistor, earth bar) placed by absolute (x, y). The caller owns
+    which rail/where and the module widths; the engine owns the geometry — rail
+    lines, device boxes, labels, enclosure outline.
+
+    Spec::
+
+        {"title": "...", "profile": "panel",
+         "enclosure": {"label": "Enclosure 600x400"},
+         "rails": [{"id": "RAIL1", "label": "power",
+                    "devices": [{"id": "QF1", "label": "QF1\\nMCB", "width": 2}, ...]}],
+         "panel_devices": [{"id": "U1", "label": "VFD", "x": 14, "y": 3,
+                            "w": 7, "h": 11}]}
+
+    ``width`` is in 18 mm DIN modules; ``x,y`` is a panel device's top-left corner
+    and ``w,h`` its size, both in the same drawing units as the rails (rail i sits
+    at y = -i*RAIL_PITCH, devices start at x = 0)."""
+    rails = spec.get("rails", [])
+    panel_devices = spec.get("panel_devices", [])
+    xs, ys = [], []
+    n_dev = 0
+
+    for i, rail in enumerate(rails):
+        yc = -i * RAIL_PITCH
+        x = 0.0
+        for dv in rail.get("devices", []):
+            w = float(dv.get("width", 1)) * MODULE_W
+            x0, x1 = x, x + w
+            y0, y1 = yc + DEV_H / 2, yc - DEV_H / 2
+            _rect(d, x0, y1, x1, y0)
+            d += elm.Label().label(dv.get("label", dv["id"]), fontsize=8).at(((x0 + x1) / 2, yc))
+            xs += [x0, x1]
+            ys += [y0, y1]
+            x = x1 + DEV_GAP
+            n_dev += 1
+        rail_end = max(x - DEV_GAP, 0.0)
+        # the DIN rail itself, drawn just behind the foot of the device boxes
+        rail_y = yc - DEV_H / 2 - 0.4
+        d += elm.Line().at((-0.5, rail_y)).to((rail_end + 0.5, rail_y))
+        d += elm.Label().label(rail.get("label", rail["id"]), fontsize=9, loc="left") \
+                        .at((0.0, yc + DEV_H / 2 + 0.9))
+        ys += [rail_y]
+
+    for pd in panel_devices:
+        x0 = float(pd["x"])
+        y0 = float(pd["y"])
+        x1 = x0 + float(pd["w"])
+        y1 = y0 - float(pd["h"])
+        _rect(d, x0, y1, x1, y0)
+        d += elm.Label().label(pd.get("label", pd["id"]), fontsize=8) \
+                        .at(((x0 + x1) / 2, (y0 + y1) / 2))
+        xs += [x0, x1]
+        ys += [y0, y1]
+        n_dev += 1
+
+    for du in spec.get("ducts", []):
+        x0 = float(du["x"])
+        y0 = float(du["y"])
+        x1 = x0 + float(du["w"])
+        y1 = y0 - float(du["h"])
+        _hatch_rect(d, x0, y1, x1, y0)
+        if du.get("label"):
+            d += elm.Label().label(du["label"], fontsize=7).at(((x0 + x1) / 2, (y0 + y1) / 2))
+        xs += [x0, x1]
+        ys += [y0, y1]
+
+    if not xs:
+        raise SchematicError("panel profile requires at least one rail or panel device")
+
+    xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
+    enc = spec.get("enclosure")
+    if enc:
+        ex0, ey1 = xmin - PANEL_MARGIN * 3.0, ymin - PANEL_MARGIN
+        ex1, ey0 = xmax + PANEL_MARGIN, ymax + PANEL_MARGIN
+        _rect(d, ex0, ey1, ex1, ey0)
+        if enc.get("label"):
+            d += elm.Label().label(enc["label"], fontsize=10).at(((ex0 + ex1) / 2, ey0 + 0.9))
+        xmin, xmax, ymin = ex0, ex1, ey1
+
+    return {"xmin": xmin, "xmax": xmax, "ymin": ymin,
+            "counts": {"rails": len(rails), "devices": n_dev}}
 
 
 def _series_on_segment(d, p0, p1, series, label_loc):

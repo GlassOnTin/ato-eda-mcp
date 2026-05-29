@@ -1,0 +1,30 @@
+{
+  "title": "CNC Cat-4 panel — DIN-rail + back-panel layout",
+  "profile": "panel",
+  "enclosure": {"label": "Enclosure ~600 x 400 mm"},
+  "rails": [
+    {"id": "RAIL1", "label": "Rail 1 — power / switchgear", "devices": [
+      {"id": "QF1", "label": "QF1\nMCB 2P\nC20", "width": 2},
+      {"id": "FU1", "label": "FU1\nSMPS 2A", "width": 1},
+      {"id": "K1", "label": "K1\nLC1D18\n+mirror", "width": 2.5},
+      {"id": "K2", "label": "K2\nLC1D18\n+mirror", "width": 2.5}
+    ]},
+    {"id": "RAIL2", "label": "Rail 2 — control / 24 V", "devices": [
+      {"id": "A1", "label": "A1\nPNOZ 8\n774760", "width": 2.5},
+      {"id": "G1", "label": "G1\nSMPS\n24V/3A", "width": 2},
+      {"id": "X1", "label": "X1\nTB +24V", "width": 2},
+      {"id": "X2", "label": "X2\nTB 0V", "width": 2}
+    ]}
+  ],
+  "ducts": [
+    {"x": 0, "y": -3.4,  "w": 9.5, "h": 2.0, "label": "wire duct"},
+    {"x": 0, "y": -11.4, "w": 9.5, "h": 1.8, "label": "wire duct"}
+  ],
+  "panel_devices": [
+    {"id": "QS1", "label": "QS1\nIsolator IP68\n(enclosure door)", "x": 0, "y": 8.6, "w": 5, "h": 2.6},
+    {"id": "U1", "label": "U1\nVFD YL620-A\n4kW", "x": 13, "y": 3.0, "w": 7, "h": 11},
+    {"id": "R1", "label": "R1\nBrake R\n47-60Ω 1kW\n(mount high / vented)", "x": 21, "y": 8.6, "w": 4.5, "h": 4.2},
+    {"id": "Z1", "label": "Z1\nEMC filter", "x": 13, "y": -9.5, "w": 4, "h": 3.2},
+    {"id": "PE", "label": "PE — earth bar", "x": 0, "y": -14.0, "w": 12, "h": 1.2}
+  ]
+}

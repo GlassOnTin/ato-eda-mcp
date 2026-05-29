@@ -1,5 +1,5 @@
 {
-  "title": "CNC Cat-4 safety chain — sheet 2/3 (control / safety)",
+  "title": "CNC Cat-4 safety chain — sheet 2/3 (control / safety) — PNOZ 8 (774760, 24 VDC)",
   "profile": "ladder",
   "rails": [
     {"id": "P24", "label": "+24 V", "side": "top"},
@@ -9,22 +9,29 @@
     {
       "id": "PNOZ",
       "type": "ic",
-      "label": "PNOZ 8\nPilz 774760",
-      "pins_left":  ["Y37", "Y2", "Y1", "S22", "S52", "S12", "Y36", "A1"],
-      "pins_right": ["13", "14", "23", "24", "A3", "A2"]
+      "label": "PNOZ 8\nPilz 774760\n24 VDC",
+      "pins_left":  ["A1", "S11", "S12", "S21", "S22", "Y36", "S52", "Y1", "Y2", "A3"],
+      "pins_right": ["13", "14", "23", "24", "33", "34", "41", "42", "A2"]
     }
   ],
   "branches": [
-    {"comment": "PNOZ supply A1 from +24 V rail", "from": "PNOZ.A1", "to": "P24", "series": []},
-    {"comment": "E-stop channel 1: Y36 -> NC1 -> S12", "from": "PNOZ.Y36", "to": "PNOZ.S12",
-     "series": [{"type": "switch_nc", "label": "E-stop NC1"}]},
-    {"comment": "E-stop channel 2: S52 -> NC2 -> S22", "from": "PNOZ.S52", "to": "PNOZ.S22",
-     "series": [{"type": "switch_nc", "label": "E-stop NC2"}]},
-    {"comment": "Monitored reset: S12 -> reset PB -> Y1", "from": "PNOZ.S12", "to": "PNOZ.Y1",
-     "series": [{"type": "button", "label": "Reset"}]},
-    {"comment": "EDM loop: Y37 -> K1 mirror NC -> K2 mirror NC -> Y2", "from": "PNOZ.Y37", "to": "PNOZ.Y2",
+    {"comment": "Supply L+ : A1 from +24 V rail", "from": "PNOZ.A1", "to": "P24", "series": []},
+    {"comment": "Supply L- : A2 to 0 V rail", "from": "PNOZ.A2", "to": "P0", "series": []},
+    {"comment": "0 V reference : A3 to 0 V rail", "from": "PNOZ.A3", "to": "P0", "series": []},
+
+    {"comment": "E-stop channel 1 (NC): S11 -> S12", "from": "PNOZ.S11", "to": "PNOZ.S12",
+     "series": [{"type": "switch_nc", "label": "E-stop ch1"}]},
+    {"comment": "E-stop channel 2 (NC): S21 -> S22", "from": "PNOZ.S21", "to": "PNOZ.S22",
+     "series": [{"type": "switch_nc", "label": "E-stop ch2"}]},
+    {"comment": "Short-across-contacts detection: Y36 <-> S52 link", "from": "PNOZ.Y36", "to": "PNOZ.S52",
+     "series": []},
+
+    {"comment": "Monitored start + EDM feedback loop: Y1 -> K1 mirror NC -> K2 mirror NC -> Start -> Y2",
+     "from": "PNOZ.Y1", "to": "PNOZ.Y2",
      "series": [{"type": "switch_nc", "label": "K1 mirror NC"},
-                {"type": "switch_nc", "label": "K2 mirror NC"}]},
+                {"type": "switch_nc", "label": "K2 mirror NC"},
+                {"type": "button", "label": "Start"}]},
+
     {"comment": "Safety out 1: +24 V -> F1 6 A -> 13", "from": "P24", "to": "PNOZ.13",
      "series": [{"type": "fuse", "label": "F1 6 A"}]},
     {"comment": "Safety out 1: 14 -> K1 coil -> 0 V", "from": "PNOZ.14", "to": "P0",
@@ -33,7 +40,10 @@
      "series": [{"type": "fuse", "label": "F2 6 A"}]},
     {"comment": "Safety out 2: 24 -> K2 coil -> 0 V", "from": "PNOZ.24", "to": "P0",
      "series": [{"type": "coil", "label": "K2 24 VDC coil"}]},
-    {"comment": "PNOZ 0 V return A2", "from": "PNOZ.A2", "to": "P0", "series": []},
-    {"comment": "PNOZ 0 V return A3", "from": "PNOZ.A3", "to": "P0", "series": []}
+
+    {"comment": "Aux N/C 41 fed from +24 V (signalling only, not safety)", "from": "P24", "to": "PNOZ.41",
+     "series": []},
+    {"comment": "Aux N/C 42 -> STOPPED lamp -> 0 V", "from": "PNOZ.42", "to": "P0",
+     "series": [{"type": "lamp", "label": "STOPPED"}]}
   ]
 }
