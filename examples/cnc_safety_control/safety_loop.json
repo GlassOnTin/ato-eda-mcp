@@ -1,0 +1,35 @@
+{
+  "title": "CNC Cat-4 — safety loop: E-stop -> PNOZ 8 -> K1/K2 -> VFD mains",
+  "profile": "flow",
+  "blocks": [
+    {"id": "MAINS", "label": "MAINS\n220 VAC 1ph", "col": 0, "row": 0, "pins_right": ["L", "N"]},
+    {"id": "K1P", "label": "K1 poles\n2x NO", "col": 1, "row": 0, "pins_left": ["1", "3"], "pins_right": ["2", "4"]},
+    {"id": "K2P", "label": "K2 poles\n2x NO", "col": 2, "row": 0, "pins_left": ["1", "3"], "pins_right": ["2", "4"]},
+    {"id": "VFD", "label": "VFD\n-> spindle 3kW", "col": 3, "row": 0, "pins_left": ["R", "S"]},
+
+    {"id": "K1C", "label": "K1 coil", "col": 1, "row": 1, "pins_left": ["A1"], "pins_right": ["A2"]},
+    {"id": "K2C", "label": "K2 coil", "col": 2, "row": 1, "pins_left": ["A1"], "pins_right": ["A2"]},
+
+    {"id": "ESTOP", "label": "E-STOP\n2-channel NC", "col": 0, "row": 2, "pins_right": ["CH1", "CH2"]},
+    {"id": "PNOZ", "label": "PNOZ 8\n774760", "col": 1, "row": 2, "pins_left": ["S11", "S21"], "pins_right": ["Y1", "Y2", "23", "13"]},
+    {"id": "EDM", "label": "EDM loop\nK1/K2 mirror NC\n+ Start", "col": 3, "row": 2, "pins_left": ["Y1", "Y2"]}
+  ],
+  "connections": [
+    {"from": "ESTOP.CH1", "to": "PNOZ.S11", "label": "ch1"},
+    {"from": "ESTOP.CH2", "to": "PNOZ.S21", "label": "ch2"},
+    {"from": "PNOZ.13", "to": "K1C.A1", "label": "13-14"},
+    {"from": "PNOZ.23", "to": "K2C.A1", "label": "23-24"},
+    {"from": "PNOZ.Y1", "to": "EDM.Y1", "label": "Y1-Y2 EDM"},
+    {"from": "PNOZ.Y2", "to": "EDM.Y2"},
+    {"from": "MAINS.L", "to": "K1P.1", "label": "L"},
+    {"from": "MAINS.N", "to": "K1P.3", "label": "N"},
+    {"from": "K1P.2", "to": "K2P.1"},
+    {"from": "K1P.4", "to": "K2P.3"},
+    {"from": "K2P.2", "to": "VFD.R"},
+    {"from": "K2P.4", "to": "VFD.S"}
+  ],
+  "mech_links": [
+    {"from": "K1C", "to": "K1P", "label": "mech"},
+    {"from": "K2C", "to": "K2P", "label": "mech"}
+  ]
+}

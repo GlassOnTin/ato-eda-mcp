@@ -45,6 +45,7 @@ writes ``out.svg`` and a sibling ``out.png`` (PNG best-effort).
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -254,6 +255,7 @@ def _render_flow(d, spec) -> dict:
 
     blocks = {}
     sides = {}  # block id -> {pin: 'left'|'right'}
+    bbox = {}   # block id -> (xmin, xmax, ymin, ymax) over its pins
     for b in blocks_spec:
         ic = _ic(b, size_w=3.5, label_inside=False)
         x = b.get("col", 0) * COL_PITCH
@@ -265,8 +267,11 @@ def _render_flow(d, spec) -> dict:
         # designator above the block — keeps long labels clear of pin names.
         pts = [_pin_anchor(ic, p) for p in
                b.get("pins_left", []) + b.get("pins_right", [])]
-        cx = (min(p[0] for p in pts) + max(p[0] for p in pts)) / 2
-        top = max(p[1] for p in pts)
+        bx = [p[0] for p in pts]
+        by = [p[1] for p in pts]
+        bbox[b["id"]] = (min(bx), max(bx), min(by), max(by))
+        cx = (min(bx) + max(bx)) / 2
+        top = max(by)
         d += elm.Label().label(b.get("label", b["id"]), fontsize=9).at((cx, top + 1.2))
 
     def resolve(ref):
@@ -283,6 +288,29 @@ def _render_flow(d, spec) -> dict:
     for i, cn in enumerate(conns):
         (pa, side_a), (pb, _side_b) = resolve(cn["from"]), resolve(cn["to"])
         _route_flow(d, pa, side_a, pb, i, cn.get("label"))
+
+    # mechanical links: dashed connector between two whole blocks (e.g. a
+    # contactor coil and its power poles), drawn between their facing edges.
+    for ml in spec.get("mech_links", []):
+        a, b = ml["from"], ml["to"]
+        if a not in bbox or b not in bbox:
+            raise SchematicError(f"mech_link references unknown block {a!r}/{b!r}")
+        axm = (bbox[a][0] + bbox[a][1]) / 2
+        bxm = (bbox[b][0] + bbox[b][1]) / 2
+        aym = (bbox[a][2] + bbox[a][3]) / 2
+        bym = (bbox[b][2] + bbox[b][3]) / 2
+        if bbox[a][2] > bbox[b][3]:        # a sits above b
+            p0, p1 = (axm, bbox[a][2]), (bxm, bbox[b][3])
+        elif bbox[b][2] > bbox[a][3]:      # b sits above a
+            p0, p1 = (axm, bbox[a][3]), (bxm, bbox[b][2])
+        elif bbox[a][0] > bbox[b][1]:      # a is to the right of b
+            p0, p1 = (bbox[a][0], aym), (bbox[b][1], bym)
+        else:                              # a is to the left of b
+            p0, p1 = (bbox[a][1], aym), (bbox[b][0], bym)
+        _dashed_line(d, p0, p1)
+        if ml.get("label"):
+            d += elm.Label().label(ml["label"], fontsize=7) \
+                            .at(((p0[0] + p1[0]) / 2 + 0.8, (p0[1] + p1[1]) / 2))
 
     # extents from every pin of every block
     xs, ys = [], []
@@ -315,6 +343,20 @@ def _route_flow(d, pa, side_a, pb, idx, label):
         d += elm.Line().at(pa).to((lane, y0))
         d += elm.Line().at((lane, y0)).to((lane, y1))
         d += elm.Line().at((lane, y1)).to(pb)
+
+
+def _dashed_line(d, p0, p1, dash=0.4, gap=0.28):
+    """Dashed straight line — used for a contactor's mechanical (coil↔poles) link."""
+    (x0, y0), (x1, y1) = p0, p1
+    length = math.hypot(x1 - x0, y1 - y0)
+    if length < 1e-9:
+        return
+    ux, uy = (x1 - x0) / length, (y1 - y0) / length
+    t = 0.0
+    while t < length:
+        e = min(t + dash, length)
+        d += elm.Line().at((x0 + ux * t, y0 + uy * t)).to((x0 + ux * e, y0 + uy * e))
+        t += dash + gap
 
 
 # ── panel profile ──────────────────────────────────────────────────────────────
