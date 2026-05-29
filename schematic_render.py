@@ -232,16 +232,26 @@ def _draw_branch(d, a, b, sa, sb, side, lane_x, series, resolve, rail_y):
 
     if not rail_end:
         y0, y1 = pa[1], pb[1]
-        # Extend the vertical run so N series elements each get >= MIN_ELEM_PITCH.
-        # When the two pins are far apart the natural span already wins (half is
-        # half the gap); when they're adjacent the run grows symmetrically about
-        # their midpoint, and the two horizontal stubs T into it at y0 / y1.
-        ymid = (y0 + y1) / 2
-        half = max(abs(y1 - y0) / 2, len(series) * MIN_ELEM_PITCH / 2)
-        ytop, ybot = ymid + half, ymid - half
-        d += elm.Line().at(pa).to((lane_x, y0))
-        d += elm.Line().at(pb).to((lane_x, y1))
-        _series_on_segment(d, (lane_x, ytop), (lane_x, ybot), series, label_loc)
+        need = len(series) * MIN_ELEM_PITCH
+        if len(series) >= 2 and abs(y1 - y0) < need:
+            # Two close pins with several series elements: a straight run between
+            # them is too short. Hang the run DOWN from the higher pin and bring
+            # the lower pin back up a hug-lane (a U) — every element stays in
+            # series, nothing floats. (A symmetric extend-past-both-pins would
+            # leave the outermost elements dangling beyond the pin taps.)
+            top_pt, bot_pt = (pa, pb) if y0 >= y1 else (pb, pa)
+            ytop = max(y0, y1)
+            ybot = ytop - need
+            ret = lane_x - 0.9 if side == "left" else lane_x + 0.9
+            d += elm.Line().at(top_pt).to((lane_x, ytop))
+            _series_on_segment(d, (lane_x, ytop), (lane_x, ybot), series, label_loc)
+            d += elm.Line().at(bot_pt).to((ret, min(y0, y1)))
+            d += elm.Line().at((ret, min(y0, y1))).to((ret, ybot))
+            d += elm.Line().at((ret, ybot)).to((lane_x, ybot))
+        else:
+            d += elm.Line().at(pa).to((lane_x, y0))
+            _series_on_segment(d, (lane_x, y0), (lane_x, y1), series, label_loc)
+            d += elm.Line().at((lane_x, y1)).to(pb)
     else:
         d += elm.Line().at(pin_pt).to((lane_x, pin_y))
         _series_on_segment(d, (lane_x, pin_y), (lane_x, ry), series, label_loc)
