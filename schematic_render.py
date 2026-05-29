@@ -242,7 +242,11 @@ def _draw_branch(d, a, b, sa, sb, side, lane_x, series, resolve, rail_y):
             top_pt, bot_pt = (pa, pb) if y0 >= y1 else (pb, pa)
             ytop = max(y0, y1)
             ybot = ytop - need
-            ret = lane_x - 0.9 if side == "left" else lane_x + 0.9
+            # Return lane sits on the IC side of the run (toward the pins), so the
+            # lower pin taps it WITHOUT its lead crossing back through the element
+            # chain. The higher pin reaches past it to the run top (the return
+            # wire doesn't extend up to that pin's level, so no crossing there).
+            ret = lane_x + 0.9 if side == "left" else lane_x - 0.9
             d += elm.Line().at(top_pt).to((lane_x, ytop))
             _series_on_segment(d, (lane_x, ytop), (lane_x, ybot), series, label_loc)
             d += elm.Line().at(bot_pt).to((ret, min(y0, y1)))
