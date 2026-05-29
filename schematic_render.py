@@ -88,6 +88,40 @@ class SchematicError(ValueError):
     """Raised on a malformed spec — surfaced to the caller, never silently fudged."""
 
 
+# ── geometric lint (check #1: floating stubs) ───────────────────────────────────
+# The renderer owns the geometry, so it can self-check its own output. As nets are
+# drawn we record each electrical segment's two endpoints and the set of legitimate
+# open terminals (IC/block pins, rail taps/ends). A node where exactly one segment
+# end lands, and which is not a declared terminal, is a dangling wire/element end.
+def _snap(p):
+    return (round(float(p[0]), 2), round(float(p[1]), 2))
+
+
+def _rec(log, p0, p1):
+    """Record a drawn electrical segment (its two endpoints) for the lint."""
+    if log is not None:
+        log["edges"].append((_snap(p0), _snap(p1)))
+
+
+def _term(log, *pts):
+    """Mark points as legitimate open terminals (pins, rail taps/ends)."""
+    if log is not None:
+        for p in pts:
+            log["terms"].add(_snap(p))
+
+
+def _lint_floating(log):
+    """Return the floating endpoints: degree-1 nodes that aren't declared terminals."""
+    from collections import defaultdict
+    deg = defaultdict(int)
+    for a, b in log["edges"]:
+        if a == b:
+            continue
+        deg[a] += 1
+        deg[b] += 1
+    return sorted(pt for pt, dgr in deg.items() if dgr == 1 and pt not in log["terms"])
+
+
 def _pin_anchor(block, name):
     """Return the (x, y) anchor of a pin, tolerating numeric pin names like '13'."""
     try:
@@ -118,13 +152,15 @@ def render(spec: dict, svg_path: Path) -> dict:
     profile = spec.get("profile", "ladder")
     d = schemdraw.Drawing()
     d.config(unit=UNIT, fontsize=10)
+    log = {"edges": [], "terms": set()}
 
     if profile == "ladder":
-        meta = _render_ladder(d, spec)
+        meta = _render_ladder(d, spec, log)
     elif profile == "flow":
-        meta = _render_flow(d, spec)
+        meta = _render_flow(d, spec, log)
     elif profile == "panel":
         meta = _render_panel(d, spec)
+        log = None          # panel is a placement drawing, not a net diagram
     else:
         raise SchematicError(f"unsupported profile {profile!r} (ladder | flow | panel)")
 
@@ -136,11 +172,19 @@ def render(spec: dict, svg_path: Path) -> dict:
     svg_path = Path(svg_path)
     d.save(str(svg_path))
     png_path = _svg_to_png(svg_path)
-    return {"svg": str(svg_path), "png": str(png_path) if png_path else "", **meta["counts"]}
+    result = {"svg": str(svg_path), "png": str(png_path) if png_path else "", **meta["counts"]}
+    if log is not None:
+        floating = _lint_floating(log)
+        result["floating_endpoints"] = len(floating)
+        if floating:
+            result["floating"] = [[x, y] for x, y in floating[:20]]
+            print(f"LINT: {len(floating)} floating endpoint(s): "
+                  f"{floating[:20]}", file=sys.stderr)
+    return result
 
 
 # ── ladder profile ───────────────────────────────────────────────────────────
-def _render_ladder(d, spec) -> dict:
+def _render_ladder(d, spec, log=None) -> dict:
     blocks_spec = spec.get("blocks", [])
     if len(blocks_spec) != 1:
         raise SchematicError("ladder profile requires exactly one block (the IC)")
@@ -151,6 +195,8 @@ def _render_ladder(d, spec) -> dict:
     ic = _ic(bspec, size_w=5.0)
     d += ic
     blocks = {bspec["id"]: ic}
+    for n in pins_left + pins_right:
+        _term(log, _pin_anchor(ic, n))   # IC pins are legitimate open terminals
 
     left_x = _pin_anchor(ic, pins_left[0])[0] if pins_left else 0.0
     right_x = _pin_anchor(ic, pins_right[0])[0] if pins_right else 0.0
@@ -202,20 +248,22 @@ def _render_ladder(d, spec) -> dict:
             raise SchematicError(f"branch {a!r}->{b!r} has no pin endpoint")
         lane = lane_x_for(side)
         lane_xs.append(lane)
-        _draw_branch(d, a, b, sa, sb, side, lane, br.get("series", []), resolve, rail_y)
+        _draw_branch(d, a, b, sa, sb, side, lane, br.get("series", []), resolve, rail_y, log)
 
     span_left = min([left_x] + lane_xs) - RAIL_MARGIN
     span_right = max([right_x] + lane_xs) + RAIL_MARGIN
     for rid, r in rails.items():
         y = rail_y[rid]
         d += elm.Line().at((span_left, y)).to((span_right, y))
+        _rec(log, (span_left, y), (span_right, y))
+        _term(log, (span_left, y), (span_right, y))   # rail (bus) ends
         d += elm.Label().label(r.get("label", rid), loc="left").at((span_left, y))
 
     return {"xmin": span_left, "xmax": span_right, "ymin": bot_y,
             "counts": {"branches": len(branches), "rails": len(rails)}}
 
 
-def _draw_branch(d, a, b, sa, sb, side, lane_x, series, resolve, rail_y):
+def _draw_branch(d, a, b, sa, sb, side, lane_x, series, resolve, rail_y, log=None):
     """Route one ladder branch: escape to its lane, run vertically through its series
     elements, meet the far endpoint."""
     pa, pb = resolve(a), resolve(b)
@@ -248,21 +296,29 @@ def _draw_branch(d, a, b, sa, sb, side, lane_x, series, resolve, rail_y):
             # wire doesn't extend up to that pin's level, so no crossing there).
             ret = lane_x + 0.9 if side == "left" else lane_x - 0.9
             d += elm.Line().at(top_pt).to((lane_x, ytop))
-            _series_on_segment(d, (lane_x, ytop), (lane_x, ybot), series, label_loc)
+            _rec(log, top_pt, (lane_x, ytop))
+            _series_on_segment(d, (lane_x, ytop), (lane_x, ybot), series, label_loc, log)
             d += elm.Line().at(bot_pt).to((ret, min(y0, y1)))
             d += elm.Line().at((ret, min(y0, y1))).to((ret, ybot))
             d += elm.Line().at((ret, ybot)).to((lane_x, ybot))
+            _rec(log, bot_pt, (ret, min(y0, y1)))
+            _rec(log, (ret, min(y0, y1)), (ret, ybot))
+            _rec(log, (ret, ybot), (lane_x, ybot))
         else:
             d += elm.Line().at(pa).to((lane_x, y0))
-            _series_on_segment(d, (lane_x, y0), (lane_x, y1), series, label_loc)
+            _series_on_segment(d, (lane_x, y0), (lane_x, y1), series, label_loc, log)
             d += elm.Line().at((lane_x, y1)).to(pb)
+            _rec(log, pa, (lane_x, y0))
+            _rec(log, (lane_x, y1), pb)
     else:
         d += elm.Line().at(pin_pt).to((lane_x, pin_y))
-        _series_on_segment(d, (lane_x, pin_y), (lane_x, ry), series, label_loc)
+        _series_on_segment(d, (lane_x, pin_y), (lane_x, ry), series, label_loc, log)
+        _rec(log, pin_pt, (lane_x, pin_y))
+        _term(log, (lane_x, ry))   # tap onto the rail (bus) — a legitimate terminal
 
 
 # ── flow profile ──────────────────────────────────────────────────────────────
-def _render_flow(d, spec) -> dict:
+def _render_flow(d, spec, log=None) -> dict:
     blocks_spec = spec.get("blocks", [])
     if not blocks_spec:
         raise SchematicError("flow profile requires at least one block")
@@ -284,6 +340,8 @@ def _render_flow(d, spec) -> dict:
         bx = [p[0] for p in pts]
         by = [p[1] for p in pts]
         bbox[b["id"]] = (min(bx), max(bx), min(by), max(by))
+        for p in pts:
+            _term(log, p)            # block pins are legitimate open terminals
         cx = (min(bx) + max(bx)) / 2
         top = max(by)
         d += elm.Label().label(b.get("label", b["id"]), fontsize=9).at((cx, top + 1.2))
@@ -301,7 +359,7 @@ def _render_flow(d, spec) -> dict:
     conns = spec.get("connections", [])
     for i, cn in enumerate(conns):
         (pa, side_a), (pb, _side_b) = resolve(cn["from"]), resolve(cn["to"])
-        _route_flow(d, pa, side_a, pb, i, cn.get("label"))
+        _route_flow(d, pa, side_a, pb, i, cn.get("label"), log)
 
     # mechanical links: dashed connector between two whole blocks (e.g. a
     # contactor coil and its power poles), drawn between their facing edges.
@@ -338,13 +396,14 @@ def _render_flow(d, spec) -> dict:
             "counts": {"blocks": len(blocks_spec), "connections": len(conns)}}
 
 
-def _route_flow(d, pa, side_a, pb, idx, label):
+def _route_flow(d, pa, side_a, pb, idx, label, log=None):
     """Route one flow connection as an orthogonal H–V–H path. Aligned pins (same y)
     get a straight horizontal bus; otherwise a vertical lane in the gutter, nudged
     per-connection so parallel buses stay separate."""
     (x0, y0), (x1, y1) = pa, pb
     if abs(y0 - y1) < 1e-6:
         d += elm.Line().at(pa).to(pb)
+        _rec(log, pa, pb)
         # only a straight horizontal bus carries a label — it sits cleanly on the
         # wire; a label on a bent route floats in empty space, so we skip those.
         if label:
@@ -357,6 +416,9 @@ def _route_flow(d, pa, side_a, pb, idx, label):
         d += elm.Line().at(pa).to((lane, y0))
         d += elm.Line().at((lane, y0)).to((lane, y1))
         d += elm.Line().at((lane, y1)).to(pb)
+        _rec(log, pa, (lane, y0))
+        _rec(log, (lane, y0), (lane, y1))
+        _rec(log, (lane, y1), pb)
 
 
 def _dashed_line(d, p0, p1, dash=0.4, gap=0.28):
@@ -481,11 +543,12 @@ def _render_panel(d, spec) -> dict:
             "counts": {"rails": len(rails), "devices": n_dev}}
 
 
-def _series_on_segment(d, p0, p1, series, label_loc):
+def _series_on_segment(d, p0, p1, series, label_loc, log=None):
     """Lay `series` elements evenly along the straight segment p0→p1, filling the
     rest with wire. With no series elements the whole segment is a single wire."""
     if not series:
         d += elm.Line().at(p0).to(p1)
+        _rec(log, p0, p1)
         return
     (x0, y0), (x1, y1) = p0, p1
     n = len(series)
@@ -505,6 +568,9 @@ def _series_on_segment(d, p0, p1, series, label_loc):
             e = e.label(el["label"], loc=label_loc)
         d += e
         d += elm.Line().at(eb).to(sb)
+        _rec(log, sa, ea)        # stub, element body, stub — the conduction path
+        _rec(log, ea, eb)
+        _rec(log, eb, sb)
 
 
 def _svg_to_png(svg_path: Path):
